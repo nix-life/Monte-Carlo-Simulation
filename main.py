@@ -5,6 +5,28 @@ import matplotlib.pyplot as plt
 import yfinance as yf
 from scipy.stats import norm
 
+def monte_carlo_call_price(S0, K, r, sigma, T, N, M):
+    dt = T / N
+
+    Z = np.random.standard_normal((M, N))
+
+    S = np.zeros((M, N + 1))
+    S[:, 0] = S0
+
+    for t in range(1, N + 1):
+        S[:, t] = S[:, t-1] * np.exp(
+            (r - 0.5 * sigma**2) * dt
+            + sigma * np.sqrt(dt) * Z[:, t-1]
+        )
+
+    ST = S[:, -1]
+    payoffs = np.maximum(ST - K, 0)
+
+    return np.exp(-r * T) * np.mean(payoffs)
+
+def black_scholes_delta_call(S0, K, r, sigma, T):
+    d1 = (np.log(S0 / K) + (r + 0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
+    return norm.cdf(d1)
 
 # 1. DOWNLOAD REAL STOCK DATA
 
@@ -96,3 +118,29 @@ plt.hist(ST, bins=100, density=True)
 plt.title("Distribution of Final Stock Prices")
 plt.xlabel("Final Price")
 plt.show()
+
+# 7. DELTA ESTIMATION (BUMP-AND-REVALUE)
+
+M_delta = 100_000     # simulations for delta
+bump = 1.0            # $1 stock price increase
+
+price_original = monte_carlo_call_price(
+    S0, K, r, sigma.item(), T, N, M_delta
+)
+
+price_bumped = monte_carlo_call_price(
+    S0 + bump, K, r, sigma.item(), T, N, M_delta
+)
+
+delta_mc = (price_bumped - price_original) / bump
+
+print(f"\nMonte Carlo Delta Estimate: {delta_mc:.4f}")
+
+# 8. VALIDATION
+bs_delta = black_scholes_delta_call(
+    S0, K, r, sigma.item(), T
+)
+
+print(f"Black–Scholes Delta:        {bs_delta:.4f}")
+print(f"Monte Carlo Delta:          {delta_mc:.4f}")
+print(f"Difference:                {delta_mc - bs_delta:.4f}")
